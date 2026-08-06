@@ -49,13 +49,22 @@ export default async function BookPage({ params }: PageProps<"/book/[book]">) {
         </dl>
       </header>
 
-      <div className="mt-20 grid gap-16 lg:mt-28 lg:grid-cols-[minmax(0,34rem)_minmax(0,1fr)] lg:gap-24">
-        {/* Front matter, as the author wrote it */}
-        <section
-          className="prose fade-in"
-          style={{ animationDelay: "100ms" }}
-          dangerouslySetInnerHTML={{ __html: book.frontMatterHtml }}
-        />
+      {/* Books that open straight into their first chapter get the contents full width. */}
+      <div
+        className={`mt-20 grid gap-16 lg:mt-28 lg:gap-24 ${
+          book.frontMatterHtml
+            ? "lg:grid-cols-[minmax(0,34rem)_minmax(0,1fr)]"
+            : ""
+        }`}
+      >
+        {book.frontMatterHtml && (
+          /* Front matter, as the author wrote it */
+          <section
+            className="prose fade-in"
+            style={{ animationDelay: "100ms" }}
+            dangerouslySetInnerHTML={{ __html: book.frontMatterHtml }}
+          />
+        )}
 
         {/* Contents, grouped by the book's own Parts */}
         <nav
@@ -67,9 +76,12 @@ export default async function BookPage({ params }: PageProps<"/book/[book]">) {
 
           {book.groups.map((group) => (
             <section key={group.title} className="mt-10 first:mt-8">
-              <h2 className="gothic text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-ink-muted">
-                {group.title}
-              </h2>
+              {/* A book with no Parts has one run, and naming it repeats the heading above. */}
+              {book.groups.length > 1 && (
+                <h2 className="gothic text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-ink-muted">
+                  {group.title}
+                </h2>
+              )}
 
               <ul className="mt-3 border-t border-hairline-soft">
                 {group.chapters.map((chapter) => (

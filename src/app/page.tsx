@@ -54,7 +54,10 @@ export default async function ShelfPage() {
 
         <dl className="fade-in border-t border-hairline pt-6 md:col-start-1 md:row-start-2 md:self-start">
           {books.map((book) => (
-            <div key={book.slug}>
+            <div
+              key={book.slug}
+              className="mt-7 border-t border-hairline-soft pt-7 first:mt-0 first:border-t-0 first:pt-0"
+            >
               <dt className="gothic text-[0.625rem] uppercase tracking-[0.2em] text-ink-faint">
                 {book.compiled || "Volume"}
               </dt>

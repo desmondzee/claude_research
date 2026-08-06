@@ -10,14 +10,20 @@ type Hit = SearchRecord & { score: number; snippet: string };
 
 const LIMIT = 20;
 
-/** Real entry points into the book, not placeholders — each returns section-level hits. */
+/** Real entry points, not placeholders — each returns hits against the current library. */
 const SUGGESTIONS = [
-  "imitation learning",
-  "teleoperation",
-  "the data bottleneck",
-  "humanoid",
-  "world models",
+  { label: "imitation learning", group: "Read about" },
+  { label: "teleoperation", group: "Read about" },
+  { label: "the data bottleneck", group: "Read about" },
+  { label: "world models", group: "Read about" },
+  { label: "Diffusion Policy", group: "Go to the source" },
+  { label: "DROID", group: "Go to the source" },
+  { label: "Physical Intelligence", group: "Go to the source" },
+  { label: "Figure AI", group: "Go to the source" },
+  { label: "CHARM Lab", group: "Go to the source" },
 ];
+
+const SUGGESTION_GROUPS = ["Read about", "Go to the source"] as const;
 
 function snippetFor(text: string, term: string): string {
   const at = text.toLowerCase().indexOf(term);
@@ -39,9 +45,12 @@ function search(records: SearchRecord[], query: string): Hit[] {
     let score = 0;
     let matchedAll = true;
 
+    const aliases = (record.aliases ?? []).join(" ").toLowerCase();
+
     for (const term of terms) {
       let termScore = 0;
       if (title.includes(term)) termScore += title.startsWith(term) ? 16 : 10;
+      if (aliases.includes(term)) termScore += 12;
       if (chapter.includes(term)) termScore += 4;
       if (text.includes(term)) termScore += 1;
       if (termScore === 0) {
@@ -54,13 +63,21 @@ function search(records: SearchRecord[], query: string): Hit[] {
     if (!matchedAll) continue;
     // Section-level hits beat whole-chapter hits — they land the reader closer.
     if (record.anchor) score += 1;
+    // Naming a paper, lab or company is a request for the thing itself, not a mention.
+    if (record.url && terms.some((term) => title.includes(term))) score += 8;
     hits.push({ ...record, score, snippet: snippetFor(record.text, terms[0]) });
   }
 
   return hits.sort((a, b) => b.score - a.score).slice(0, LIMIT);
 }
 
+/** `https://arxiv.org/abs/2303.04137` → `arxiv.org` — enough to know where a click goes. */
+function domainOf(url: string): string {
+  return url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
+}
+
 function href(hit: SearchRecord): string {
+  if (hit.url) return hit.url;
   return `/book/${hit.bookSlug}/${hit.chapterSlug}${hit.anchor ? `#${hit.anchor}` : ""}`;
 }
 
@@ -75,7 +92,8 @@ export default function SearchButton() {
 
   const hits = records ? search(records, query) : [];
   const sectionCount = records?.filter((record) => record.anchor).length ?? 0;
-  const chapterCount = (records?.length ?? 0) - sectionCount;
+  const referenceCount = records?.filter((record) => record.url).length ?? 0;
+  const chapterCount = (records?.length ?? 0) - sectionCount - referenceCount;
 
   const close = useCallback(() => {
     setOpen(false);
@@ -123,7 +141,9 @@ export default function SearchButton() {
   const go = useCallback(
     (hit: Hit) => {
       close();
-      router.push(href(hit));
+      // A paper or company lives outside the library — leave the reading page where it is.
+      if (hit.url) window.open(hit.url, "_blank", "noopener,noreferrer");
+      else router.push(href(hit));
     },
     [close, router],
   );
@@ -194,8 +214,8 @@ export default function SearchButton() {
                     setActive(0);
                   }}
                   onKeyDown={onInputKeyDown}
-                  placeholder="Search chapters and sections"
-                  aria-label="Search chapters and sections"
+                  placeholder="Search the library, its papers and its companies"
+                  aria-label="Search the library, its papers and its companies"
                   className="h-14 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-faint"
                 />
                 <kbd className="gothic text-[0.625rem] uppercase tracking-[0.16em] text-ink-faint">
@@ -215,14 +235,25 @@ export default function SearchButton() {
                           index === active ? "bg-paper-sunk" : ""
                         }`}
                       >
-                        <span className="gothic block text-[0.625rem] uppercase tracking-[0.16em] text-ink-faint">
-                          {hit.chapter}
+                        <span className="gothic flex items-baseline gap-2 text-[0.625rem] uppercase tracking-[0.16em] text-ink-faint">
+                          {/* Outward links say what they are and where they go. */}
+                          {hit.url && (
+                            <span className="text-ai">{hit.book}</span>
+                          )}
+                          <span className="truncate">
+                            {hit.url ? domainOf(hit.url) : hit.chapter}
+                          </span>
                         </span>
-                        <span className="mt-1 block text-[0.9375rem] leading-snug text-ink">
+                        <span className="mt-1 flex items-baseline gap-1.5 text-[0.9375rem] leading-snug text-ink">
                           {hit.title}
+                          {hit.url && (
+                            <span aria-hidden className="text-ink-faint">
+                              ↗
+                            </span>
+                          )}
                         </span>
                         <span className="mt-1 block truncate text-[0.8125rem] leading-snug text-ink-muted">
-                          {hit.snippet}
+                          {hit.url ? hit.text || hit.chapter : hit.snippet}
                         </span>
                       </button>
                     </li>
@@ -246,24 +277,31 @@ export default function SearchButton() {
               {/* Empty is an invitation: name what's searchable, and offer a way in. */}
               {!query && (
                 <div className="px-5 py-5">
-                  <p className="eyebrow">Start with</p>
-                  <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
-                    {SUGGESTIONS.map((suggestion) => (
-                      <li key={suggestion}>
-                        <button
-                          type="button"
-                          onClick={() => setQuery(suggestion)}
-                          className="text-[0.9375rem] text-ink-muted transition-colors hover:text-ai"
-                        >
-                          {suggestion}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="gothic mt-5 text-[0.625rem] uppercase tracking-[0.16em] text-ink-faint">
+                  {SUGGESTION_GROUPS.map((group, groupIndex) => (
+                    <div key={group} className={groupIndex ? "mt-5" : ""}>
+                      <p className="eyebrow">{group}</p>
+                      <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+                        {SUGGESTIONS.filter(
+                          (suggestion) => suggestion.group === group,
+                        ).map((suggestion) => (
+                          <li key={suggestion.label}>
+                            <button
+                              type="button"
+                              onClick={() => setQuery(suggestion.label)}
+                              className="text-[0.9375rem] text-ink-muted transition-colors hover:text-ai"
+                            >
+                              {suggestion.label}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+
+                  <p className="gothic mt-6 border-t border-hairline-soft pt-4 text-[0.625rem] uppercase tracking-[0.16em] text-ink-faint">
                     {records
-                      ? `${sectionCount} sections across ${chapterCount} chapters`
-                      : "Searching titles and opening lines"}
+                      ? `${sectionCount} sections · ${chapterCount} chapters · ${referenceCount} papers, labs and companies`
+                      : "Searching the library and the work it cites"}
                   </p>
                 </div>
               )}

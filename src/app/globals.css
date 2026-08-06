@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "katex/dist/katex.min.css";
 
 /*
   A reading room.
@@ -108,7 +109,9 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 1.5rem;
-  width: 4.25rem;
+  /* A long title wraps into further columns, so the spine thickens rather than overflowing. */
+  width: auto;
+  min-width: 4.25rem;
   height: 24rem;
   padding: 1.75rem 1.25rem;
   background: var(--paper-raised);
@@ -145,7 +148,7 @@ body {
   /* Tall enough that the title still runs as a single line down the spine. */
   .spine {
     height: 22rem;
-    width: 3.5rem;
+    min-width: 3.5rem;
     gap: 1rem;
     padding: 1.25rem 0.75rem;
   }
@@ -372,6 +375,17 @@ body {
 .prose img {
   max-width: 100%;
   height: auto;
+}
+
+/* Displayed equations are wider than the measure, so they scroll rather than the page. */
+.prose .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.35rem 0;
+}
+
+.prose .katex {
+  font-size: 1.02em;
 }
 
 /*

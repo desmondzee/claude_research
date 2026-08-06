@@ -4,8 +4,10 @@ import Slugger from "github-slugger";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import remarkRehype from "remark-rehype";
 import rehypeRaw from "rehype-raw";
+import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
 
@@ -45,11 +47,14 @@ export type Book = {
   words: number;
 };
 
+/* Books carry `$…$` and `$$…$$`, so math is typeset at build time rather than shipped raw. */
 const renderer = unified()
   .use(remarkParse)
   .use(remarkGfm)
+  .use(remarkMath)
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeRaw)
+  .use(rehypeKatex, { throwOnError: false, strict: false })
   .use(rehypeSlug)
   .use(rehypeStringify, { allowDangerousHtml: true });
 
@@ -58,7 +63,11 @@ async function toHtml(markdown: string): Promise<string> {
   return String(file);
 }
 
-/** `Chapter 4 — Humanoid Manufacturers` → slug `chapter-4`, label `Chapter 4`. */
+/**
+ * Turns a chapter heading into a short slug and a structural label. Handles the two
+ * conventions the library accepts: `Chapter 4 — Humanoid Manufacturers` and a bare
+ * numbered heading like `4. Humanoid Manufacturers`.
+ */
 function identify(heading: string): {
   slug: string;
   label: string;
@@ -83,6 +92,16 @@ function identify(heading: string): {
       slug: `appendix-${letter.toLowerCase()}`,
       label: `Appendix ${letter}`,
       title,
+    };
+  }
+
+  // `4. Humanoid Manufacturers` — the numbering carries the same information.
+  const numbered = heading.match(/^(\d+)[.)]\s+(.+)$/);
+  if (numbered) {
+    return {
+      slug: `chapter-${numbered[1]}`,
+      label: `Chapter ${numbered[1]}`,
+      title: numbered[2].trim(),
     };
   }
 
@@ -137,7 +156,13 @@ function readGroups(tableOfContents: string, chapters: Chapter[]): Group[] {
   }
 
   const leftover = chapters.filter((chapter) => !claimed.has(chapter.slug));
-  if (leftover.length) groups.push({ title: "Closing", chapters: leftover });
+  if (leftover.length) {
+    // A book with no Parts gets one unnamed run rather than a misleading "Closing".
+    groups.push({
+      title: groups.length ? "Closing" : "Contents",
+      chapters: leftover,
+    });
+  }
 
   return groups.filter((group) => group.chapters.length > 0);
 }
@@ -160,24 +185,60 @@ function normalize(source: string): string {
   return out.join("\n");
 }
 
+/**
+ * Lifts a chapter body's headings so its sections always render as `<h2>` whatever depth
+ * they had in the source. Keeps the reading column identical across both book shapes.
+ */
+function promote(body: string, by: number): string {
+  if (by <= 0) return body;
+  let inFence = false;
+
+  return body
+    .split("\n")
+    .map((line) => {
+      if (/^```/.test(line)) inFence = !inFence;
+      if (inFence) return line;
+      const heading = line.match(/^(#{2,6})(\s+\S.*)$/);
+      if (!heading) return line;
+      const depth = Math.max(2, heading[1].length - by);
+      return "#".repeat(depth) + heading[2];
+    })
+    .join("\n");
+}
+
 async function parse(slug: string, rawSource: string): Promise<Book> {
   const source = normalize(rawSource);
   const lines = source.split("\n");
 
-  // Split on `# ` headings: everything before the first chapter heading is front matter.
-  const breaks: number[] = [];
-  let inFence = false;
-  lines.forEach((line, index) => {
-    if (/^```/.test(line)) inFence = !inFence;
-    if (!inFence && /^#\s+\S/.test(line)) breaks.push(index);
-  });
+  const headings = (depth: number) => {
+    const found: number[] = [];
+    const marker = new RegExp(`^#{${depth}}\\s+\\S`);
+    let inFence = false;
+    lines.forEach((line, index) => {
+      if (/^```/.test(line)) inFence = !inFence;
+      if (!inFence && marker.test(line)) found.push(index);
+    });
+    return found;
+  };
+
+  /*
+    Books come in two shapes. Some give each chapter its own `#` under the book title;
+    others keep a single `#` title and number their chapters at `##`. Chapters live one
+    level below the title either way, so pick the depth that actually divides the book.
+  */
+  const tops = headings(1);
+  const chapterDepth = tops.length > 1 ? 1 : 2;
+  const breaks = chapterDepth === 1 ? tops : [tops[0], ...headings(2)];
+  const strip = new RegExp(`^#{${chapterDepth}}\\s+`);
+  const sectionMarker = new RegExp(`^#{${chapterDepth + 1}}\\s+\\S`);
+  const sectionStrip = new RegExp(`^#{${chapterDepth + 1}}\\s+`);
 
   const title = lines[breaks[0]].replace(/^#\s+/, "").trim();
   const frontMatter = lines.slice(breaks[0] + 1, breaks[1] ?? lines.length);
 
   const chapters: Chapter[] = [];
   for (let i = 1; i < breaks.length; i++) {
-    const heading = lines[breaks[i]].replace(/^#\s+/, "").trim();
+    const heading = lines[breaks[i]].replace(strip, "").trim();
     const body = lines
       .slice(breaks[i] + 1, breaks[i + 1] ?? lines.length)
       .join("\n")
@@ -189,13 +250,13 @@ async function parse(slug: string, rawSource: string): Promise<Book> {
       heading,
       sections: body
         .split("\n")
-        .filter((line) => /^##\s+\S/.test(line))
+        .filter((line) => sectionMarker.test(line))
         .map((line) => {
-          const sectionTitle = line.replace(/^##\s+/, "").trim();
+          const sectionTitle = line.replace(sectionStrip, "").trim();
           return { title: sectionTitle, anchor: slugger.slug(sectionTitle) };
         }),
       words: countWords(body),
-      html: await toHtml(body),
+      html: await toHtml(promote(body, chapterDepth - 1)),
       markdown: body,
     });
   }
@@ -203,11 +264,11 @@ async function parse(slug: string, rawSource: string): Promise<Book> {
   const subtitle = (frontMatter.find((line) => /^###\s+/.test(line)) ?? "")
     .replace(/^###\s+/, "")
     .trim();
-  const compiled = (
-    frontMatter.find((line) => /^\*\*Compiled/.test(line)) ?? ""
-  )
-    .replace(/\*\*/g, "")
-    .trim();
+  // Take only the bolded run, so a trailing `· Evidence cut-off: …` stays out of the label.
+  const compiled =
+    (frontMatter.find((line) => /^\*\*Compiled/.test(line)) ?? "")
+      .match(/^\*\*([^*]+)\*\*/)?.[1]
+      .trim() ?? "";
 
   // Strip the title block and the markdown table of contents — the index page renders both.
   const tocStart = frontMatter.findIndex((line) =>
@@ -268,7 +329,12 @@ export function getBooks(): Promise<Book[]> {
     return Promise.all(
       files.map((file) =>
         parse(
-          file.replace(/\.md$/, ""),
+          // Filenames become URLs, so normalise them: `A_Study_Of.md` → `a-study-of`.
+          file
+            .replace(/\.md$/, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, ""),
           fs.readFileSync(path.join(CONTENT_DIR, file), "utf8"),
         ),
       ),
