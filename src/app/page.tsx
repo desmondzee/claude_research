@@ -30,11 +30,13 @@ export default async function ShelfPage() {
             The rule runs the full column, ending on the same right margin as the masthead —
             it gives the page an edge, and reads as a shelf with room for what comes next.
           */}
-          <ul className="flex flex-wrap items-end gap-5 border-b border-hairline">
+          <ul className="flex flex-wrap items-end gap-x-5 gap-y-10 border-b border-hairline">
             {books.map((book, index) => (
               <li
                 key={book.slug}
-                className="fade-in"
+                /* Never compress a slot: the spine keeps its width and would spill onto its
+                   neighbour. A shelf that runs out of room wraps to the next row instead. */
+                className="fade-in shrink-0"
                 style={{ animationDelay: `${140 + index * 90}ms` }}
               >
                 <Link
