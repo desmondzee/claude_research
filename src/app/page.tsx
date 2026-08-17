@@ -44,7 +44,9 @@ export default async function ShelfPage() {
                   className="spine"
                   aria-label={`${book.title} — ${book.chapters.length} chapters`}
                 >
-                  <span className="spine__title font-mincho">{book.title}</span>
+                  <span className="spine__title font-mincho">
+                    {book.shelfTitle}
+                  </span>
                   <span className="spine__meta">
                     {book.chapters.length} ch.
                   </span>

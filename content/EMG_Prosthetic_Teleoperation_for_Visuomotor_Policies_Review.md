@@ -4,6 +4,8 @@
 
 **Compiled August 2026** · Evidence cut-off: 5 August 2026
 
+**Shelf title: Myoelectric Teleoperation**
+
 ---
 
 ## Abstract

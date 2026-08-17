@@ -102,18 +102,24 @@ body {
 
 /* ── The shelf ─────────────────────────────────────────────────────────────
    A library shows spines. Latin turns on its side exactly as it does on a
-   real book, and hovering pulls the volume out a little.                    */
+   real book, and hovering pulls the volume out a little.
+
+   In `vertical-rl` the axes swap: `height` is the length of a line of type and
+   `width` is how many columns of it the spine holds. Both are fixed, so every
+   volume is cut to the same board and the shelf lines up — a title long enough
+   to need a second column gets one inside that width rather than by growing.  */
 .spine {
   writing-mode: vertical-rl;
   text-orientation: mixed;
   display: flex;
-  align-items: flex-start;
+  /* Main axis runs down the spine: title at the head, chapter count at the foot. */
+  justify-content: space-between;
+  align-items: center;
   gap: 1.5rem;
-  /* A long title wraps into further columns, so the spine thickens rather than overflowing. */
-  width: auto;
-  min-width: 4.25rem;
+  width: 5.25rem;
   height: 24rem;
-  padding: 1.75rem 1.25rem;
+  padding: 1.75rem 1.125rem;
+  overflow: hidden;
   background: var(--paper-raised);
   border-left: 1px solid var(--hairline);
   border-right: 1px solid var(--hairline);
@@ -134,6 +140,8 @@ body {
   font-size: 1.0625rem;
   line-height: 1.35;
   letter-spacing: 0.02em;
+  /* Two columns is the board's capacity; a longer title is trimmed, not spilled. */
+  max-width: 100%;
 }
 
 .spine__meta {
@@ -142,15 +150,16 @@ body {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--ink-faint);
+  white-space: nowrap;
 }
 
 @media (max-width: 640px) {
   /* Tall enough that the title still runs as a single line down the spine. */
   .spine {
+    width: 4.5rem;
     height: 22rem;
-    min-width: 3.5rem;
     gap: 1rem;
-    padding: 1.25rem 0.75rem;
+    padding: 1.25rem 0.875rem;
   }
 
   .spine__title {
@@ -332,15 +341,67 @@ body {
 .prose pre {
   background: var(--paper-sunk);
   border: 1px solid var(--hairline-soft);
-  padding: 1.25rem;
+  padding: 1.25rem 1.4rem;
   overflow-x: auto;
-  font-size: 0.85em;
-  line-height: 1.6;
+  font-size: 0.8125em;
+  line-height: 1.75;
+  tab-size: 4;
 }
 
 .prose pre code {
   background: none;
   padding: 0;
+  color: var(--ink);
+  /* A listing is read line by line — never rewrap it to fit the measure. */
+  white-space: pre;
+}
+
+/*
+  Syntax colour, kept to the book's two inks. Comments recede, literals take the
+  indigo, and structure is carried by weight rather than by a third hue — a code
+  listing should still read as a page of this book.
+*/
+.prose .hljs-comment,
+.prose .hljs-quote {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.prose .hljs-keyword,
+.prose .hljs-built_in,
+.prose .hljs-literal,
+.prose .hljs-type,
+.prose .hljs-title,
+.prose .hljs-title.class_,
+.prose .hljs-title.function_,
+.prose .hljs-section,
+.prose .hljs-selector-tag {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.prose .hljs-string,
+.prose .hljs-number,
+.prose .hljs-regexp,
+.prose .hljs-symbol,
+.prose .hljs-attr,
+.prose .hljs-attribute,
+.prose .hljs-variable,
+.prose .hljs-template-variable {
+  color: var(--ai);
+}
+
+.prose .hljs-meta,
+.prose .hljs-meta .hljs-string,
+.prose .hljs-punctuation,
+.prose .hljs-params,
+.prose .hljs-operator {
+  color: var(--ink-muted);
+}
+
+.prose .hljs-deletion {
+  color: var(--ink-muted);
+  text-decoration: line-through;
 }
 
 /* Tables carry a lot of this book's comparisons — let them scroll, never the page. */
@@ -407,6 +468,14 @@ body {
   .prose th:last-child,
   .prose td:last-child {
     padding-right: 1.5rem;
+  }
+
+  /* Listings get the same full-bleed strip, for the same reason. */
+  .prose pre {
+    width: calc(100% + 3rem);
+    margin-inline: -1.5rem;
+    border-inline: 0;
+    padding-inline: 1.5rem;
   }
 }
 

@@ -8,6 +8,7 @@ import remarkMath from "remark-math";
 import remarkRehype from "remark-rehype";
 import rehypeRaw from "rehype-raw";
 import rehypeKatex from "rehype-katex";
+import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
 
@@ -39,6 +40,8 @@ export type Group = {
 export type Book = {
   slug: string;
   title: string;
+  /** What the spine carries. A paper's full title is too long to set vertically. */
+  shelfTitle: string;
   subtitle: string;
   compiled: string;
   frontMatterHtml: string;
@@ -55,6 +58,12 @@ const renderer = unified()
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeRaw)
   .use(rehypeKatex, { throwOnError: false, strict: false })
+  /*
+    Highlight only what a fence declares. Guessing the language of a two-line
+    snippet gets it wrong often enough to be distracting, and an untagged block —
+    program output, a register dump — is usually not a language at all.
+  */
+  .use(rehypeHighlight, { detect: false })
   .use(rehypeSlug)
   .use(rehypeStringify, { allowDangerousHtml: true });
 
@@ -270,6 +279,12 @@ async function parse(slug: string, rawSource: string): Promise<Book> {
       .match(/^\*\*([^*]+)\*\*/)?.[1]
       .trim() ?? "";
 
+  /* `**Shelf title: Myoelectric Teleoperation**` — optional, and only the shelf reads it. */
+  const shelfTitle =
+    (frontMatter.find((line) => /^\*\*Shelf title:/i.test(line)) ?? "")
+      .match(/^\*\*Shelf title:\s*([^*]+)\*\*/i)?.[1]
+      .trim() || title;
+
   // Strip the title block and the markdown table of contents — the index page renders both.
   const tocStart = frontMatter.findIndex((line) =>
     /^##\s+Table of Contents/i.test(line),
@@ -292,6 +307,7 @@ async function parse(slug: string, rawSource: string): Promise<Book> {
       if (/^###\s+/.test(line) && line.includes(subtitle) && subtitle)
         return false;
       if (/^\*\*Compiled/.test(line)) return false;
+      if (/^\*\*Shelf title:/i.test(line)) return false;
       if (
         tocStart !== -1 &&
         index >= tocStart &&
@@ -308,6 +324,7 @@ async function parse(slug: string, rawSource: string): Promise<Book> {
   return {
     slug,
     title,
+    shelfTitle,
     subtitle,
     compiled,
     frontMatterHtml: await toHtml(prose),
